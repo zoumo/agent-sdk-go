@@ -40,6 +40,58 @@ func TestSessionCapacityReservedUntilStartCompletes(t *testing.T) {
 	require.NoError(t, second.Close())
 }
 
+func TestInFlightSessionResumesUseOneSubscriptionEach(t *testing.T) {
+	f := startFake(t, "resume-session-wait", codex.Limits{Subscriptions: 2})
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	resume := func(ctx context.Context, id string) error {
+		_, err := codex.Open(ctx, codex.SessionOptions{
+			Client: f.c,
+			Resume: &types.ThreadResumeParams{ThreadID: id},
+		})
+		return err
+	}
+	firstCtx, cancelFirst := context.WithCancel(ctx)
+	defer cancelFirst()
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { first <- resume(firstCtx, "first") }()
+	waitTrace(t, f.trace, "thread/resume")
+	go func() { second <- resume(ctx, "second") }()
+
+	tick := time.NewTicker(time.Millisecond)
+	defer tick.Stop()
+	for {
+		frames := trace(t, f.trace)
+		if len(frames) >= 4 {
+			require.Equal(t, "thread/resume", frames[3].Method)
+			break
+		}
+		select {
+		case err := <-second:
+			require.FailNowf(t, "second resume returned before dispatch", "%v", err)
+		case <-ctx.Done():
+			require.FailNow(t, "second resume did not reach the peer")
+		case <-tick.C:
+		}
+	}
+	require.ErrorIs(t, resume(ctx, "third"), codex.ErrLimit)
+
+	// The echo response confirms both writes finished before cancellation.
+	responseBarrier(t, f)
+	cancelFirst()
+	callError(t, <-first, codex.OutcomeUnknown, context.Canceled)
+	frames := assertMethods(t, f, "initialize", "initialized", "thread/resume", "thread/resume", "echo", "thread/unsubscribe")
+	require.JSONEq(t, `{"threadId":"first"}`, string(frames[5].Params))
+
+	replacement, err := codex.Open(ctx, codex.SessionOptions{Client: f.c})
+	require.NoError(t, err, "failed resume must release its slot")
+	t.Cleanup(func() { _ = replacement.Close() })
+	require.ErrorIs(t, resume(ctx, "third"), codex.ErrLimit, "the second resume must still consume its slot")
+	require.NoError(t, replacement.Close())
+	cancel()
+	callError(t, <-second, codex.OutcomeUnknown, context.Canceled)
+}
+
 func TestConcurrentNativeOperationsFenceAdmissionUntilLastCompletion(t *testing.T) {
 	f := startFake(t, "session-operations", codex.Limits{})
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

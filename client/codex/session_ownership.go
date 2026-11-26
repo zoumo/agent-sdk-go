@@ -29,25 +29,37 @@ func (o *sessionOwnership) ownerLocked(id string) *Session { return o.owners[id]
 // Callers iterate under Client.mu without receiving a mutable registry.
 func (o *sessionOwnership) sessionsLocked() iter.Seq[*Session] { return maps.Values(o.owners) }
 
-// open owns capacity reservation, native dispatch and construction failure
-// cleanup. Start binds within response admission; resume binds before dispatch.
+// open admits a Session under Client.mu. Resume already knows its identity.
+// Start reserves capacity until its response supplies an identity.
 func (o *sessionOwnership) open(ctx context.Context, s *Session, options SessionOptions) error {
 	c := o.client
 	c.mu.Lock()
 	var err error
-	if c.cause != nil {
+	switch {
+	case c.cause != nil:
 		err = c.cause
-	} else if len(o.owners)+o.reservations >= c.limits.Subscriptions {
+	case len(o.owners)+o.reservations >= c.limits.Subscriptions:
 		err = ErrLimit
-	} else {
+	case options.Resume != nil:
+		if bindErr := o.bindLocked(s, options.Resume.ThreadID); bindErr != nil {
+			err = &CallError{Method: "thread/resume", Dispatch: NotSent, Cause: bindErr}
+		}
+	default:
 		o.reservations++
 	}
 	c.mu.Unlock()
 	if err == nil {
-		defer func() { c.mu.Lock(); o.reservations--; c.mu.Unlock() }()
 		if options.Resume != nil {
 			err = o.resume(ctx, s, *options.Resume)
 		} else {
+			defer func() {
+				c.mu.Lock()
+				defer c.mu.Unlock()
+				// A bound Session already converted its reservation to an owner.
+				if s.root == "" {
+					o.reservations--
+				}
+			}()
 			var response types.ThreadStartResponse
 			err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
 				var r types.ThreadStartResponse
@@ -60,6 +72,7 @@ func (o *sessionOwnership) open(ctx context.Context, s *Session, options Session
 				if err := o.bindLocked(s, r.Thread.ID); err != nil {
 					return err
 				}
+				o.reservations--
 				o.attachments[r.Thread.ID].managed = true
 				s.startRaw = append(json.RawMessage(nil), raw...)
 				return nil
@@ -103,13 +116,7 @@ func (o *sessionOwnership) bindLocked(s *Session, id string) error {
 // if the release cannot be confirmed.
 func (o *sessionOwnership) resume(ctx context.Context, s *Session, params types.ThreadResumeParams) error {
 	c := o.client
-	c.mu.Lock()
-	err := o.bindLocked(s, params.ThreadID)
-	c.mu.Unlock()
-	if err != nil {
-		return &CallError{Method: "thread/resume", Dispatch: NotSent, Cause: err}
-	}
-	err = c.callOwned(ctx, "thread/resume", params, nil, false, func(raw json.RawMessage) error {
+	err := c.callOwned(ctx, "thread/resume", params, nil, false, func(raw json.RawMessage) error {
 		result := resumeThreadResult{expectedID: params.ThreadID}
 		if err := json.Unmarshal(raw, &result); err != nil {
 			return fmt.Errorf("%w: decode thread/resume result: %w", ErrProtocol, err)

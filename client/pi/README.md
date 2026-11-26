@@ -1,6 +1,8 @@
 # Native Pi client
 
-[Open](process.go) starts one Pi process per session. [Attach](session.go) takes ownership of two closable streams. Both wait for `get_state` to return a session ID. Use a deadline for that handshake.
+[Open](process.go) creates a fresh session in a new Pi process with a dedicated stdio connection. Opening with `ResumeID` starts another process and restores the specified identity. [Attach](session.go) takes ownership of two closable streams. Both wait for `get_state` to return a session ID. Use a deadline for that handshake.
+
+A Session stays bound to its handshake ID until close. The commands `new_session`, `switch_session`, `fork`, and `clone` are prohibited on a bound connection because they can change its identity. If Pi reports a conflicting ID, the handle closes, `ID()` keeps the handshake value, and further writes fail. `ForkMessages` sends only the read-only `get_fork_messages` query. [Current session operations](session_operations.go)
 
 Read events with `Receive`. It delivers non-response records in wire order and preserves unknown fields. Each inbound JSONL record must fit within the 64 MiB reader limit. `Close` releases the streams and process while keeping received events available to drain. Use `CloseAndDiscard` to release unread events when you stop consuming them. An owned process gets stdin EOF and has two seconds to exit before the client kills it.
 

@@ -429,6 +429,18 @@ func TestPiRPCPeer(t *testing.T) {
 			if req.StreamingBehavior != "steer" || delayedPrompt != nil {
 				os.Exit(22)
 			}
+			// Check that local tracing adds no fields to the Pi prompt.
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(scan.Bytes(), &fields); err != nil {
+				os.Exit(21)
+			}
+			for key := range fields {
+				switch key {
+				case "id", "type", "message", "images", "streamingBehavior":
+				default:
+					os.Exit(34)
+				}
+			}
 			if req.Message == "/fixture" {
 				resp["data"] = map[string]string{"disposition": "handled"}
 				break

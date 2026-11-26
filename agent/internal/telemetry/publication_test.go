@@ -22,7 +22,7 @@ func TestPublicationSnapshotsDeliveredEvent(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
 	traces := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
 	t.Cleanup(func() { assert.NoError(t, traces.Shutdown(context.Background())) })
-	instruments := New("codex", traces, metricnoop.NewMeterProvider())
+	instruments := New("codex", traces, metricnoop.NewMeterProvider(), nil)
 	var reader agent.EventStream
 	var published int64
 	instruments.published = publicationCounter{

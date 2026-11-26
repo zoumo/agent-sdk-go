@@ -48,7 +48,7 @@ type streamFactory func(context.Context, claude.SessionOptions) (streamOpen, err
 func New(config Config) *Core {
 	core := &Core{
 		config:          cloneConfig(config),
-		telemetry:       telemetry.New("claude", config.TracerProvider, config.MeterProvider),
+		telemetry:       telemetry.New("claude", config.TracerProvider, config.MeterProvider, config.Tracer),
 		newSubmissionID: uuidv4.New,
 	}
 	core.leases = corelease.New[struct{}, *session](

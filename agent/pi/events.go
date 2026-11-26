@@ -36,24 +36,19 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 		IsError    bool            `json:"isError"`
 		DurationMs *float64        `json:"durationMs"`
 	}
-	piMeta := map[string]any{"nativeType": native.Type}
-	meta := map[string]any{"pi": piMeta}
 	envelope := eventenvelope.Envelope{SessionID: s.ID()}
 	var occurred time.Time
 	var item string
+	var nativeRequestID string
 	var payloads []agent.Payload
 	fallback := agent.UnsupportedNativeEventPayload{AgentType: "pi", Raw: native.Raw}
 	if native.Type == "extension_ui_request" || json.Unmarshal(native.Raw, &f) == nil {
 		switch native.Type {
 		case "extension_ui_request":
-			var nativeID string
 			var err error
-			payloads, item, nativeID, err = s.registerUI(native)
+			payloads, item, nativeRequestID, err = s.registerUI(native)
 			if err != nil {
 				return nil, err
-			}
-			if nativeID != "" {
-				piMeta["nativeRequestId"] = nativeID
 			}
 		case "agent_start", "agent_settled":
 			if native.Type == "agent_settled" {
@@ -167,6 +162,11 @@ func (s *session) project(native pi.Event) ([]agent.Event, error) {
 		case agent.AgentThinking:
 			payloadItem = message.MessageID
 		}
+		piMeta := map[string]any{"nativeType": native.Type}
+		if nativeRequestID != "" {
+			piMeta["nativeRequestId"] = nativeRequestID
+		}
+		meta := map[string]any{"pi": piMeta}
 		event, err := envelope.Event(payloadItem, payload, occurred, meta)
 		if err != nil {
 			return nil, err

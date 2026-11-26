@@ -225,7 +225,7 @@ func RunMock(ctx context.Context, request MockRequest, policy MockPolicy) (resul
 	if resultStream != nil {
 		defer resultStream.Close()
 	}
-	run, err := beginMockTransaction(request)
+	run, err := beginMockTransaction(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -264,16 +264,39 @@ func RunMock(ctx context.Context, request MockRequest, policy MockPolicy) (resul
 	return result, runErr
 }
 
-func beginMockTransaction(request MockRequest) (transaction *mockTransaction, err error) {
+func lockMockStart(ctx context.Context, fixtureDir string) (*Lock, error) {
+	path := filepath.Join(fixtureDir, "locks", "mock-start.lock")
+	retry := time.NewTicker(10 * time.Millisecond)
+	defer retry.Stop()
+	for {
+		if err := ContextFailure(ctx); err != nil {
+			return nil, err
+		}
+		lock, err := lockFile(path, true, false)
+		if !errors.Is(err, ErrBusy) {
+			return lock, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ContextFailure(ctx)
+		case <-retry.C:
+		}
+	}
+}
+
+func beginMockTransaction(ctx context.Context, request MockRequest) (transaction *mockTransaction, err error) {
 	fixtureDir, err := CanonicalFixtureDir(request.FixtureDir)
 	if err != nil {
 		return nil, err
 	}
-	allocation, err := lockFile(filepath.Join(fixtureDir, "locks", "mock-start.lock"), true, true)
+	allocation, err := lockMockStart(ctx, fixtureDir)
 	if err != nil {
 		return nil, err
 	}
 	defer allocation.Close()
+	if err := ContextFailure(ctx); err != nil {
+		return nil, err
+	}
 
 	lock, exclusive, err := beginActionLock(fixtureDir)
 	if err != nil {
@@ -383,6 +406,9 @@ func beginMockTransaction(request MockRequest) (transaction *mockTransaction, er
 		if err != nil {
 			return nil, err
 		}
+		if err := ContextFailure(ctx); err != nil {
+			return nil, err
+		}
 		run = newTransactionContext(fixture, plan, *execution, fixtureDir)
 	} else {
 		if !exclusive {
@@ -390,6 +416,11 @@ func beginMockTransaction(request MockRequest) (transaction *mockTransaction, er
 		}
 		if !slices.Contains(current.Connections, request.Connection) {
 			return nil, fmt.Errorf("undeclared mock connection %s", request.Connection)
+		}
+		// Allocation already publishes execution state. Once it starts,
+		// finish the claim and let RunMock settle any later cancellation.
+		if err := ContextFailure(ctx); err != nil {
+			return nil, err
 		}
 		commandArgs := append([]string{"--fixture-dir", fixtureDir, "--connection", request.Connection}, request.NativeArgs...)
 		run, err = createTransactionLocked(fixtureDir, "mock", commandArgs, request.NativeArgs, request.Timeout, request.ProgressFD, current, nil, nil)

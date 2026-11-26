@@ -3,9 +3,7 @@ package pi_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -21,9 +19,9 @@ func TestBash(t *testing.T) {
 		data    string
 		want    pi.BashResult
 	}{
-		{"silent success", nil, `{"output":"","exitCode":0,"cancelled":false,"truncated":false}`, pi.BashResult{ExitCode: new(0)}},
-		{"nonzero exit", new(false), `{"output":"failed\n","exitCode":7,"cancelled":false,"truncated":false}`, pi.BashResult{Output: "failed\n", ExitCode: new(7)}},
-		{"truncated", new(true), `{"output":"tail","exitCode":0,"cancelled":false,"truncated":true,"fullOutputPath":"/tmp/full.log"}`, pi.BashResult{
+		{"silent success", nil, `{"output":"","exitCode":0,"cancelled":false,"truncated":false}`, pi.BashResult{ExitCode: new(0)}},                                  //nolint:misspell // Pi wire field.
+		{"nonzero exit", new(false), `{"output":"failed\n","exitCode":7,"cancelled":false,"truncated":false}`, pi.BashResult{Output: "failed\n", ExitCode: new(7)}}, //nolint:misspell // Pi wire field.
+		{"truncated", new(true), `{"output":"tail","exitCode":0,"cancelled":false,"truncated":true,"fullOutputPath":"/tmp/full.log"}`, pi.BashResult{ //nolint:misspell // Pi wire field.
 			Output: "tail", ExitCode: new(0), Truncated: true, FullOutputPath: new("/tmp/full.log"),
 		}},
 	} {
@@ -57,11 +55,11 @@ func TestBash(t *testing.T) {
 
 func TestBashResponseErrors(t *testing.T) {
 	for _, data := range []string{
-		`{"cancelled":false,"truncated":false}`,
+		`{"cancelled":false,"truncated":false}`, //nolint:misspell // Pi wire field.
 		`{"output":"","truncated":false}`,
-		`{"output":"","cancelled":false}`,
-		`{"output":null,"cancelled":false,"truncated":false}`,
-		`{"output":"","exitCode":"0","cancelled":false,"truncated":false}`,
+		`{"output":"","cancelled":false}`,                                  //nolint:misspell // Pi wire field.
+		`{"output":null,"cancelled":false,"truncated":false}`,              //nolint:misspell // Pi wire field.
+		`{"output":"","exitCode":"0","cancelled":false,"truncated":false}`, //nolint:misspell // Pi wire field.
 	} {
 		t.Run(data, func(t *testing.T) {
 			s, ctx := runPeer(t, func(p peer) error {
@@ -131,7 +129,7 @@ func TestAbortBashWhileReceivingOutput(t *testing.T) {
 		if err := p.reply(abort, nil); err != nil {
 			return err
 		}
-		return p.reply(bash, json.RawMessage(`{"output":"partial","cancelled":true,"truncated":false}`))
+		return p.reply(bash, json.RawMessage(`{"output":"partial","cancelled":true,"truncated":false}`)) //nolint:misspell // Pi wire field.
 	})
 	type outcome struct {
 		result pi.BashResult
@@ -150,7 +148,7 @@ func TestAbortBashWhileReceivingOutput(t *testing.T) {
 	require.NoError(t, s.AbortBash(ctx))
 	got := <-done
 	require.NoError(t, got.err)
-	assert.Equal(t, pi.BashResult{Output: "partial", Cancelled: true}, got.result)
+	assert.Equal(t, pi.BashResult{Output: "partial", Canceled: true}, got.result)
 }
 
 func TestCancelBashWaitAcceptsLateResponse(t *testing.T) {
@@ -175,7 +173,7 @@ func TestCancelBashWaitAcceptsLateResponse(t *testing.T) {
 				return fmt.Errorf("expected get_state, got %q", state.Type)
 			}
 			if i == 1 {
-				if err := p.reply(bash, json.RawMessage(`{"output":"late","exitCode":0,"cancelled":false,"truncated":false}`)); err != nil {
+				if err := p.reply(bash, json.RawMessage(`{"output":"late","exitCode":0,"cancelled":false,"truncated":false}`)); err != nil { //nolint:misspell // Pi wire field.
 					return err
 				}
 			}
@@ -183,11 +181,7 @@ func TestCancelBashWaitAcceptsLateResponse(t *testing.T) {
 				return err
 			}
 		}
-		c, err := p.receive()
-		if !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected EOF, got %+v and %v", c, err)
-		}
-		return nil
+		return p.expectEOF()
 	})
 	wait, cancel := context.WithCancel(ctx)
 	defer cancel()

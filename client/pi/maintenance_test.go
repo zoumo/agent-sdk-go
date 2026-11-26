@@ -3,9 +3,7 @@ package pi_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -197,10 +195,7 @@ func TestAbortRetryCancelAfterDispatch(t *testing.T) {
 		if err := p.reply(abort, nil); err != nil {
 			return err
 		}
-		if c, err := p.receive(); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected EOF, received %+v, error %v", c, err)
-		}
-		return nil
+		return p.expectEOF()
 	})
 	wait, cancel := context.WithCancel(ctx)
 	defer cancel()

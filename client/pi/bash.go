@@ -9,7 +9,7 @@ import (
 type BashResult struct {
 	Output         string  `json:"output"`
 	ExitCode       *int    `json:"exitCode,omitempty"` // Pi may omit this when the process is killed.
-	Cancelled      bool    `json:"cancelled"`
+	Canceled       bool    `json:"cancelled"`          //nolint:misspell // Pi wire field.
 	Truncated      bool    `json:"truncated"`
 	FullOutputPath *string `json:"fullOutputPath,omitempty"` // Path on the Pi host when Pi saves the full output.
 }
@@ -25,18 +25,18 @@ func (s *Session) Bash(ctx context.Context, command string, excludeFromContext *
 	var data struct {
 		Output         *string `json:"output"`
 		ExitCode       *int    `json:"exitCode"`
-		Cancelled      *bool   `json:"cancelled"`
+		Canceled       *bool   `json:"cancelled"` //nolint:misspell // Pi wire field.
 		Truncated      *bool   `json:"truncated"`
 		FullOutputPath *string `json:"fullOutputPath"`
 	}
 	if _, err := s.readData(ctx, "bash", fields, &data); err != nil {
 		return BashResult{}, err
 	}
-	if data.Output == nil || data.Cancelled == nil || data.Truncated == nil {
-		return BashResult{}, malformedData("bash", errors.New("output, cancelled and truncated are required"))
+	if data.Output == nil || data.Canceled == nil || data.Truncated == nil {
+		return BashResult{}, malformedData("bash", errors.New("missing output, cancellation status, or truncation status"))
 	}
 	return BashResult{
-		Output: *data.Output, ExitCode: data.ExitCode, Cancelled: *data.Cancelled,
+		Output: *data.Output, ExitCode: data.ExitCode, Canceled: *data.Canceled,
 		Truncated: *data.Truncated, FullOutputPath: data.FullOutputPath,
 	}, nil
 }

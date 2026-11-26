@@ -38,6 +38,17 @@ func (p peer) receive() (command, error) {
 	return c, err
 }
 
+func (p peer) expectEOF() error {
+	c, err := p.receive()
+	if err == nil {
+		return fmt.Errorf("expected EOF, received command %q", c.Type)
+	}
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return fmt.Errorf("waiting for EOF: %w", err)
+}
+
 func (p peer) reply(c command, data any) error {
 	return json.NewEncoder(p.output).Encode(map[string]any{"type": "response", "command": c.Type, "id": c.ID, "data": data, "success": true})
 }

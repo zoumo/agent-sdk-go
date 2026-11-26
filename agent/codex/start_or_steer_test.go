@@ -224,32 +224,57 @@ func TestStartOrSteerUnknownWriteBlocksLaterInputWithoutRetry(t *testing.T) {
 		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
 		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"maybe","type":"text"}],"threadId":"root-a"}}`,
-		`<{"id":93,"result":{"turn":{"id":"turn-maybe","items":[],"status":"inProgress"}}}`,
-		`>{"id":94,"method":"thread/unsubscribe","params":{"threadId":"root-a"}}`,
-		`<{"id":94,"result":{"status":"unsubscribed"}}`,
+		`<{"method":"item/agentMessage/delta","params":{"threadId":"root-a","turnId":"turn-a","itemId":"early","delta":"working"}}`,
+		codexTurnStartedFrame,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+		`>{"id":94,"method":"turn/start","params":{"input":[{"text":"resume","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
 	)
-	peerSession := prepareCodexPeerWithFrameDelays(
-		t,
-		"passed",
-		map[int]time.Duration{6: 800 * time.Millisecond},
-		frames...,
-	)
-	session := openStartOrSteerSessionWithPeer(t, ctx, peerSession)
+	frames = append(frames, codexCloseFrames(95, "root-a")...)
+	var delta, started *gatedFrameReader
+	session, stream := openControlledInteractionSession(t, ctx, frames, testStreamWrappers{
+		reader: func(reader io.ReadCloser) io.ReadCloser {
+			delta = newGatedFrameReader(reader, []byte("item/agentMessage/delta"))
+			started = newGatedFrameReader(delta, []byte("turn/started"))
+			return started
+		},
+	})
+	t.Cleanup(started.releaseOnce)
+	t.Cleanup(delta.releaseOnce)
 
-	unknownCtx, stopUnknown := context.WithTimeout(ctx, 200*time.Millisecond)
+	unknownCtx, stopUnknown := context.WithCancel(ctx)
 	defer stopUnknown()
-	_, err := session.StartOrSteer(unknownCtx, textInput("maybe"))
-	require.Error(t, err)
-	assert.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(err))
+	done := make(chan error, 1)
+	go func() {
+		_, err := session.StartOrSteer(unknownCtx, textInput("maybe"))
+		done <- err
+	}()
+	awaitSignal(t, delta.entered, "delta after native turn/start write")
+	stopUnknown()
+	require.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(<-done))
+	delta.releaseOnce()
+	event := nextEvent(t, ctx, stream)
+	require.Equal(t, agent.EventAgentMessageChunk, event.Type())
+	assert.Equal(t, agent.MessageChunk{
+		MessageID: "early",
+		Content:   []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "working"}}},
+	}, event.Payload)
 
 	receipt, err := session.StartOrSteer(ctx, textInput("must not be retried"))
 	require.NoError(t, err)
-	assert.Equal(t, agent.InputNotApplied, receipt.Result)
-	assert.Empty(t, receipt.Submission)
-	require.NotNil(t, receipt.Acceptance.Sent)
-	assert.False(t, *receipt.Acceptance.Sent)
-	assert.Nil(t, receipt.Acceptance.NativeAccepted)
-	assert.Nil(t, receipt.Acceptance.NativeRecorded)
+	assert.Equal(t, agent.InputReceipt{
+		Result: agent.InputNotApplied, Acceptance: agent.Acceptance{Sent: new(false)},
+	}, receipt)
+	injected, err := session.(agent.Injector).Inject(ctx, textInput("must not be injected"))
+	require.Equal(t, agent.ErrorFailedPrecondition, agent.CodeOf(err))
+	assert.Equal(t, agent.Acceptance{Sent: new(false)}, injected.Acceptance)
+
+	started.releaseOnce()
+	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+	resumed, err := session.StartOrSteer(ctx, textInput("resume"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedCurrentWork, resumed.Result)
+	assert.Equal(t, "turn-a", resumed.Submission)
 }
 
 func TestStartOrSteerRejectsOverlapWithoutSecondNativeWrite(t *testing.T) {
@@ -302,21 +327,31 @@ func TestStartOrSteerRejectsOverlapWithoutSecondNativeWrite(t *testing.T) {
 }
 
 func TestStartOrSteerLateResponsePreservesObservedIdle(t *testing.T) {
+	testStartOrSteerAfterTerminalEvent(t,
+		`<{"method":"thread/status/changed","params":{"threadId":"root-a","status":{"type":"idle"}}}`, "")
+}
+
+func TestStartOrSteerLateResponsePreservesObservedCompletion(t *testing.T) {
+	testStartOrSteerAfterTerminalEvent(t,
+		`<{"method":"turn/completed","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"completed"}}}`, "completed")
+}
+
+func testStartOrSteerAfterTerminalEvent(t *testing.T, terminalFrame, stopReason string) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	const response = `{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000000}}}`
 	frames := append([]string(nil), mockCodexInit...)
 	frames = append(frames,
 		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
 		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
 		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"first","type":"text"}],"threadId":"root-a"}}`,
 		`<{"method":"turn/started","params":{"threadId":"root-a","turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
-		`<{"method":"thread/status/changed","params":{"threadId":"root-a","status":{"type":"idle"}}}`,
-		"<"+response,
+		terminalFrame,
+		`<{"id":93,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress","startedAt":1700000000}}}`,
 	)
 	frames = append(frames, codexCloseFrames(94, "root-a")...)
 	var gate *gatedFrameReader
-	session, stream := openControlledInteractionSessionWithStatus(t, ctx, frames, "passed", false, testStreamWrappers{
+	session, stream := openControlledInteractionSession(t, ctx, frames, testStreamWrappers{
 		reader: func(reader io.ReadCloser) io.ReadCloser {
 			gate = newGatedFrameReader(reader, []byte(`"startedAt"`))
 			return gate
@@ -334,20 +369,22 @@ func TestStartOrSteerLateResponsePreservesObservedIdle(t *testing.T) {
 		done <- result{receipt: receipt, err: err}
 	}()
 	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
-	require.Equal(t, agent.StateIdle, nextState(t, ctx, stream))
+	terminal := nextStatePayload(t, ctx, stream)
+	require.Equal(t, new(agent.StateIdle), terminal.State)
+	assert.Equal(t, stopReason, terminal.StopReason)
 	awaitSignal(t, gate.entered, "turn/start response")
 	gate.releaseOnce()
 	started := <-done
 	require.NoError(t, started.err)
-	assert.Equal(t, "turn-a", started.receipt.Submission)
-	assert.Equal(t, agent.InputAppliedNewWork, started.receipt.Result)
-	require.NotNil(t, started.receipt.Acceptance.NativeAccepted)
-	assert.True(t, *started.receipt.Acceptance.NativeAccepted)
+	assert.Equal(t, agent.InputReceipt{
+		Result: agent.InputAppliedNewWork, Submission: "turn-a",
+		Acceptance: agent.Acceptance{Sent: new(true), NativeAccepted: new(true)},
+	}, started.receipt)
 
 	// The peer expects unsubscribe next. An interrupt would fail replay.
 	receipt, err := session.Interrupt(ctx, agent.InterruptOptions{})
-	assert.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, receipt)
 	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, receipt)
 }
 
 func TestStartOrSteerMissingTurnIdentityIsOutcomeUnknown(t *testing.T) {
@@ -376,6 +413,44 @@ func TestStartOrSteerMissingTurnIdentityIsOutcomeUnknown(t *testing.T) {
 	assert.False(t, *receipt.Acceptance.Sent)
 	assert.Nil(t, receipt.Acceptance.NativeAccepted)
 	assert.Nil(t, receipt.Acceptance.NativeRecorded)
+}
+
+func TestStartOrSteerMissingTurnIdentityAfterStartedAllowsNextInput(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	frames := append([]string(nil), mockCodexInit...)
+	frames = append(frames,
+		`>{"id":92,"method":"thread/start","params":{"cwd":"/synthetic"}}`,
+		`<{"id":92,"result":`+codexThreadStartResult("root-a")+`}`,
+		`>{"id":93,"method":"turn/start","params":{"input":[{"text":"first","type":"text"}],"threadId":"root-a"}}`,
+		codexTurnStartedFrame,
+		`<{"id":93,"result":{"turn":{"id":"","items":[],"status":"inProgress","startedAt":1700000001}}}`,
+		`>{"id":94,"method":"turn/start","params":{"input":[{"text":"next","type":"text"}],"threadId":"root-a"}}`,
+		`<{"id":94,"result":{"turn":{"id":"turn-a","items":[],"status":"inProgress"}}}`,
+	)
+	frames = append(frames, codexCloseFrames(95, "root-a")...)
+	var gate *gatedFrameReader
+	session, stream := openControlledInteractionSession(t, ctx, frames, testStreamWrappers{
+		reader: func(reader io.ReadCloser) io.ReadCloser {
+			gate = newGatedFrameReader(reader, []byte("1700000001"))
+			return gate
+		},
+	})
+	t.Cleanup(gate.releaseOnce)
+
+	done := make(chan error, 1)
+	go func() {
+		_, err := session.StartOrSteer(ctx, textInput("first"))
+		done <- err
+	}()
+	require.Equal(t, agent.StateRunning, nextState(t, ctx, stream))
+	gate.releaseOnce()
+	require.Equal(t, agent.ErrorOutcomeUnknown, agent.CodeOf(<-done))
+
+	receipt, err := session.StartOrSteer(ctx, textInput("next"))
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputAppliedCurrentWork, receipt.Result)
+	assert.Equal(t, "turn-a", receipt.Submission)
 }
 
 func TestStartOrSteerRejectsInvalidInputAndClosedSession(t *testing.T) {

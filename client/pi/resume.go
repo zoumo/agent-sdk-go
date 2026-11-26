@@ -66,11 +66,8 @@ func (o Options) resumeFile() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if header.ID != o.ResumeID {
+		if header.ID != o.ResumeID || checkSessionCwd(o.Cwd, header.Cwd) != nil {
 			continue
-		}
-		if err := checkSessionCwd(o.Cwd, header.Cwd); err != nil {
-			return "", err
 		}
 		if found != "" {
 			return "", fmt.Errorf("pi: ambiguous session ID %q in %q", header.ID, dir)

@@ -153,11 +153,20 @@ func TestOpenAndExactResume(t *testing.T) {
 	assert.FileExists(t, marker)
 	path := filepath.Join(work, "prior.jsonl")
 	require.NoError(t, os.WriteFile(path, []byte(fmt.Sprintf(`{"type":"session","version":3,"id":"known-id","cwd":%q}`, work)+"\n"), 0o600))
+	foreign := filepath.Join(work, "foreign.jsonl")
+	writeSavedFile(t, foreign, savedHeader(t, "known-id", t.TempDir(), 3, nil)+"\n")
 	o := base
 	o.ResumeID = "known-id"
+	scope := pi.HistoryScope{Cwd: work, SessionDir: work}
+	info, err := pi.GetSessionInfo(ctx, scope, o.ResumeID)
+	require.NoError(t, err)
+	require.Equal(t, path, info.SessionFile)
 	s, err := pi.Open(ctx, o)
 	require.NoError(t, err)
 	require.Equal(t, "known-id", s.ID())
+	state, err = s.State(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, info.SessionFile, state.SessionFile)
 	require.NoError(t, s.Close())
 	o.SessionFile = path
 	s, err = pi.Open(ctx, o)
@@ -171,11 +180,17 @@ func TestOpenAndExactResume(t *testing.T) {
 	_, err = pi.Open(ctx, o)
 	require.ErrorIs(t, err, os.ErrNotExist)
 	o.ResumeID = "known-id"
-	o.Cwd = t.TempDir()
+	o.SessionFile = foreign
 	_, err = pi.Open(ctx, o)
 	require.ErrorContains(t, err, "differs from requested cwd")
+	o.SessionFile = ""
+	o.Cwd = t.TempDir()
+	_, err = pi.Open(ctx, o)
+	require.ErrorIs(t, err, os.ErrNotExist)
 	o.Cwd = work
 	require.NoError(t, os.WriteFile(filepath.Join(work, "duplicate.jsonl"), []byte(fmt.Sprintf(`{"type":"session","id":%q,"cwd":%q}`, o.ResumeID, work)+"\n"), 0o600))
+	_, err = pi.GetSessionInfo(ctx, scope, o.ResumeID)
+	require.ErrorIs(t, err, pi.ErrAmbiguousSession)
 	_, err = pi.Open(ctx, o)
 	require.ErrorContains(t, err, "ambiguous")
 }

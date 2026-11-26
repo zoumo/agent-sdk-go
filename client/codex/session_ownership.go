@@ -60,8 +60,7 @@ func (o *sessionOwnership) open(ctx context.Context, s *Session, options Session
 					o.reservations--
 				}
 			}()
-			var response types.ThreadStartResponse
-			err = c.callAccept(ctx, "thread/start", options.Thread, &response, false, func(raw json.RawMessage) error {
+			err = c.callAccept(ctx, "thread/start", options.Thread, nil, false, func(raw json.RawMessage) error {
 				var r types.ThreadStartResponse
 				if err := json.Unmarshal(raw, &r); err != nil {
 					return err

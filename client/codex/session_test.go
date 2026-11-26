@@ -147,6 +147,16 @@ func (p *sessionPeer) handle(mode string, m fakeEnvelope, send func(json.RawMess
 			p.held = append(p.held, m)
 			return true
 		}
+		if p.starts == 1 {
+			switch mode {
+			case "session-start-empty-id":
+				send(m.ID, strings.Replace(startResult, `"native-thread-42"`, `""`, 1))
+				return true
+			case "session-start-invalid-model":
+				send(m.ID, strings.Replace(startResult, `"model":"fake"`, `"model":42`, 1))
+				return true
+			}
+		}
 		send(m.ID, strings.ReplaceAll(startResult, "native-thread-42", id))
 		fmt.Fprintf(os.Stdout, `{"method":"future/opened","params":{"threadId":%q}}`+"\n", id)
 		if mode == "session-owned-diagnostic" {

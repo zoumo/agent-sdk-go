@@ -96,8 +96,8 @@ func newSession(
 			invalidated = nil
 			return events
 		},
-		Release:   func() { provider.sessionClosed(created) },
-		Published: provider.telemetry.RecordPublished,
+		Release:            func() { provider.sessionClosed(created) },
+		PreparePublication: provider.telemetry.PreparePublication,
 	})
 	return created
 }

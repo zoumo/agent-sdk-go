@@ -246,7 +246,9 @@ func (r *MockRun) stop(cause error) error {
 
 func (r *MockRun) finish(result *lifecycle.MockResult, runErr error) {
 	r.finishOnce.Do(func() {
-		if (result != nil || r.runCtx.Err() == nil) && !r.streams.Closed() {
+		// The transaction returns a result once it claims the connection,
+		// even if it fails before calling Started.
+		if result != nil && !r.streams.Closed() {
 			runErr = errors.Join(runErr, r.streams.Close(runErr))
 		}
 		if runErr != nil {

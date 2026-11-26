@@ -94,8 +94,8 @@ func newSession(
 			invalidated = nil
 			return events
 		},
-		Release:   func() { provider.sessionClosed(created) },
-		Published: provider.telemetry.RecordPublished,
+		Release:            func() { provider.sessionClosed(created) },
+		PreparePublication: provider.telemetry.PreparePublication,
 	})
 	// Finish conversion before starting a queue the caller must drain.
 	var staged []agent.Event

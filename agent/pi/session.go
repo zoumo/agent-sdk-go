@@ -60,11 +60,11 @@ func newSession(core *Core, native *pi.Session, restricted bool, extension *sess
 		s.interactions = make(map[agent.InteractionRef]*piInteraction)
 	}
 	s.stream = eventstream.New(eventstream.Hooks{
-		BeginClose:  func(eventstream.End) { s.mu.Lock(); s.closed = true; s.mu.Unlock() },
-		CloseEvents: s.closeInteractionEvents,
-		CloseNative: func() error { return operationError("close", errors.Join(native.Close(), extension.remove())) },
-		Release:     func() { core.release(s.ID()); core.leases.SessionClosed(s) },
-		Published:   core.telemetry.RecordPublished,
+		BeginClose:         func(eventstream.End) { s.mu.Lock(); s.closed = true; s.mu.Unlock() },
+		CloseEvents:        s.closeInteractionEvents,
+		CloseNative:        func() error { return operationError("close", errors.Join(native.Close(), extension.remove())) },
+		Release:            func() { core.release(s.ID()); core.leases.SessionClosed(s) },
+		PreparePublication: core.telemetry.PreparePublication,
 	})
 	return s
 }

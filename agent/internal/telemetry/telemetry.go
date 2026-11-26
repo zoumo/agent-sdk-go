@@ -64,23 +64,41 @@ func New(provider string, traces trace.TracerProvider, meters metric.MeterProvid
 	}
 }
 
-// RecordPublished records events after the stream accepts the whole batch.
-func (t Telemetry) RecordPublished(events []agent.Event) {
-	ctx := context.Background()
-	for _, event := range events {
+type publishedEvent struct {
+	eventType   string
+	unsupported []attribute.KeyValue
+}
+
+// PreparePublication captures telemetry fields before the consumer can read
+// the events. The returned callback records them after the stream accepts the batch.
+func (t Telemetry) PreparePublication(events []agent.Event) func() {
+	snapshot := make([]publishedEvent, len(events))
+	for i, event := range events {
 		if t.published != nil {
-			t.published.Add(ctx, 1, metric.WithAttributes(
-				t.provider,
-				attribute.String("event.type", string(event.Type())),
-			))
+			snapshot[i].eventType = string(event.Type())
 		}
 		if payload, ok := event.Payload.(agent.UnsupportedNativeEventPayload); ok && t.tracer != nil {
-			t.recordUnsupportedEvent(ctx, event, payload.AgentType)
+			snapshot[i].unsupported = t.unsupportedEventAttributes(event, payload.AgentType)
+		}
+	}
+	return func() {
+		ctx := context.Background()
+		for _, event := range snapshot {
+			if t.published != nil {
+				t.published.Add(ctx, 1, metric.WithAttributes(
+					t.provider,
+					attribute.String("event.type", event.eventType),
+				))
+			}
+			if event.unsupported != nil {
+				_, span := t.tracer.Start(ctx, "agent.unsupported_native_event", trace.WithAttributes(event.unsupported...))
+				span.End()
+			}
 		}
 	}
 }
 
-func (t Telemetry) recordUnsupportedEvent(ctx context.Context, event agent.Event, agentType string) {
+func (t Telemetry) unsupportedEventAttributes(event agent.Event, agentType string) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{t.provider, attribute.String("session.id", event.SessionID)}
 	meta, _ := event.Meta[agentType].(map[string]any)
 	if method, _ := meta["method"].(string); method != "" {
@@ -92,8 +110,7 @@ func (t Telemetry) recordUnsupportedEvent(ctx context.Context, event agent.Event
 	if subtype, _ := meta["nativeSubtype"].(string); subtype != "" {
 		attrs = append(attrs, attribute.String("native.subtype", subtype))
 	}
-	_, span := t.tracer.Start(ctx, "agent.unsupported_native_event", trace.WithAttributes(attrs...))
-	span.End()
+	return attrs
 }
 
 type Observation struct {

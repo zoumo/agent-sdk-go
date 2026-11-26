@@ -21,16 +21,16 @@ type Submission struct {
 // BeginSubmission starts timing every call and starts the standard span unless
 // a legacy tracer is configured. Defer End with the returned receipt and error.
 func (t Telemetry) BeginSubmission(ctx context.Context) (context.Context, *Submission) {
-	s := &Submission{observation: t.observe(ctx, StartOrSteer)}
+	observation := t.observe(ctx, StartOrSteer)
 	if t.legacyTracer != nil {
-		return ctx, s
+		return ctx, &Submission{observation: observation}
 	}
-	s.parentCarrier = submissiontrace.ContextCarrier(ctx)
-	if s.parentCarrier != nil {
-		s.observation.ctx = trace.ContextWithRemoteSpanContext(s.observation.ctx, spanContext(*s.parentCarrier))
+	parent := submissiontrace.ContextCarrier(ctx)
+	if parent != nil {
+		observation.ctx = trace.ContextWithRemoteSpanContext(ctx, spanContext(*parent))
 	}
-	ctx, s.observation = s.observation.startSpan(ctx)
-	return ctx, s
+	ctx, observation = observation.startSpan(ctx)
+	return ctx, &Submission{observation: observation, parentCarrier: parent}
 }
 
 // AfterAdmission starts the legacy span before native submission.

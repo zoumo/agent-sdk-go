@@ -9,7 +9,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventstream"
 	"github.com/zoumo/agent-sdk-go/agent/internal/interactionledger"
-	"github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/client/pi"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
@@ -111,8 +110,8 @@ func closedError() error {
 }
 
 func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt agent.InputReceipt, err error) {
-	ctx, observation := s.core.telemetry.BeginSubmission(ctx, s.core.config.Tracer != nil)
-	defer func() { observation.End(string(receipt.Result), err) }()
+	ctx, observation := s.core.telemetry.BeginSubmission(ctx)
+	defer func() { observation.End(receipt, err) }()
 	message, images, err := promptContent(input)
 	if err != nil {
 		return receipt, err
@@ -135,10 +134,7 @@ func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt 
 	generation := s.settled
 	s.mu.Unlock()
 
-	if s.core.config.Tracer != nil {
-		span := submissiontrace.Start(ctx, s.core.config.Tracer)
-		defer func() { span.End(err) }()
-	}
+	observation.AfterAdmission(ctx)
 	// Pi decides atomically whether to start or steer during prompt admission.
 	// A separate get_state probe here could race Pi's own scheduler.
 	result, sendErr := s.native.Prompt(ctx, message, images, "steer")

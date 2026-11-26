@@ -149,7 +149,9 @@ done
 telemetry_imports=$(go list -f '{{range .Imports}}{{println .}}{{end}}' ./agent/internal/telemetry)
 while IFS= read -r dependency; do
   case "$dependency" in
-    github.com/zoumo/agent-sdk-go/agent|go.opentelemetry.io/otel|\
+    github.com/zoumo/agent-sdk-go/agent|\
+    github.com/zoumo/agent-sdk-go/agent/internal/submissiontrace|\
+    go.opentelemetry.io/otel|\
     go.opentelemetry.io/otel/attribute|go.opentelemetry.io/otel/codes|\
     go.opentelemetry.io/otel/metric|go.opentelemetry.io/otel/propagation|\
     go.opentelemetry.io/otel/trace) ;;

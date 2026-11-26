@@ -133,6 +133,12 @@ func (s *Session) closeWriter() { s.closeInput.Do(func() { _ = s.input.Close() }
 func (s *Session) closeReader() { s.closeOutput.Do(func() { _ = s.output.Close() }) }
 
 func (s *Session) read() {
+	var processExit chan error
+	if s.process != nil {
+		processExit = make(chan error, 1)
+		go s.waitProcess(processExit)
+	}
+
 	scanner := bufio.NewScanner(s.output)
 	scanner.Buffer(make([]byte, 4096), 64<<20)
 	scanner.Split(splitRecord)
@@ -146,10 +152,11 @@ func (s *Session) read() {
 		err = scanner.Err()
 	}
 	s.mu.Lock()
+	if (s.closing || s.process != nil) && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, os.ErrClosed)) {
+		err = nil
+	}
 	if s.terminal != nil {
 		err = s.terminal
-	} else if s.closing && (errors.Is(err, io.ErrClosedPipe) || errors.Is(err, os.ErrClosed)) {
-		err = nil
 	} else if err == nil && !s.closing {
 		err = io.ErrUnexpectedEOF
 	}
@@ -159,8 +166,10 @@ func (s *Session) read() {
 	s.closeWriter()
 	s.closeReader()
 	s.writes.Wait()
-	if s.process != nil {
-		err = errors.Join(err, s.process.wait())
+	if processExit != nil {
+		timer := time.AfterFunc(shutdownGrace, s.process.kill)
+		err = errors.Join(err, <-processExit)
+		timer.Stop()
 	}
 	s.mu.Lock()
 	s.terminal = err
@@ -168,6 +177,16 @@ func (s *Session) read() {
 	s.mu.Unlock()
 	_ = s.events.Close(err)
 	close(s.done)
+}
+
+func (s *Session) waitProcess(result chan<- error) {
+	result <- s.process.wait()
+	// A descendant can keep stdout open even after Pi has been reaped.
+	select {
+	case <-s.done:
+	case <-time.After(shutdownGrace):
+		s.closeReader()
+	}
 }
 
 // fail prevents further writes when the transport or live identity can no longer be trusted.

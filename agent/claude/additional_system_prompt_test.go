@@ -279,6 +279,9 @@ func TestProviderDoesNotExposeAdditionalSystemPromptOnNativeFailure(t *testing.T
 				closeSessionOnCleanup(t, session)
 				stream, streamErr := session.Events()
 				require.NoError(t, streamErr)
+				if tt.resume {
+					requireStartupForwardingGap(t, ctx, stream)
+				}
 				event, nextErr := stream.Next(ctx)
 				require.NoError(t, nextErr)
 				assert.Equal(t, agent.EventAgentMessage, event.Type())

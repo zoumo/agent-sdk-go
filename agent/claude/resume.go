@@ -267,9 +267,8 @@ func waitForResumeIdentity(
 	ctx context.Context,
 	native *claude.Session,
 	target *resumeTarget,
-) (*claude.Event, []claude.Received, *resumeIdentityGuard, error) {
+) ([]claude.Received, *resumeIdentityGuard, error) {
 	var buffered initBuffer
-	var init *claude.Event
 	guard := &resumeIdentityGuard{target: target}
 	for {
 		received, err := native.Receive(ctx)
@@ -281,7 +280,7 @@ func waitForResumeIdentity(
 				message = "Claude did not confirm resume identity before the timeout"
 				err = ctx.Err()
 			}
-			return nil, nil, nil, adapterError(
+			return nil, nil, adapterError(
 				agent.ErrorUnavailable,
 				reason,
 				message,
@@ -297,36 +296,19 @@ func waitForResumeIdentity(
 				} else if errors.Is(identity.Err, context.DeadlineExceeded) || errors.Is(identity.Err, context.Canceled) {
 					reason = ErrorReasonResumeIdentityTimeout
 				}
-				return nil, nil, nil, adapterError(code, reason, "Claude read-only identity probe failed", nil)
+				return nil, nil, adapterError(code, reason, "Claude read-only identity probe failed", nil)
 			}
 			if identity.SessionID != target.sessionID || !sameDirectory(identity.Cwd, target.cwd) {
-				return nil, nil, nil, adapterError(agent.ErrorNativeRejected, ErrorReasonResumeIdentityMismatch, "Claude status identity conflicts with the saved-session target", nil)
+				return nil, nil, adapterError(agent.ErrorNativeRejected, ErrorReasonResumeIdentityMismatch, "Claude status identity conflicts with the saved-session target", nil)
 			}
-			return init, buffered.events, guard, nil
+			return buffered.events, guard, nil
 		}
-		if received.Event == nil {
-			if received.Request != nil {
-				if err := buffered.add(received); err != nil {
-					return nil, nil, nil, err
-				}
-			}
-			continue
+		if err := guard.inspect(received.Event); err != nil {
+			return nil, nil, err
 		}
 
-		if isResumeInit(received.Event) {
-			if err := target.verifyInit(received.Event); err != nil {
-				return nil, nil, nil, err
-			}
-			if guard.initSeen {
-				return nil, nil, nil, resumeDuplicateInit()
-			}
-			guard.initSeen = true
-			event := *received.Event
-			init = &event
-			continue
-		}
 		if err := buffered.add(received); err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	}
 }
@@ -359,18 +341,18 @@ func (t *resumeTarget) verifyInit(event *claude.Event) error {
 	return nil
 }
 
-func (g *resumeIdentityGuard) inspect(event *claude.Event) (bool, error) {
+func (g *resumeIdentityGuard) inspect(event *claude.Event) error {
 	if g == nil || !isResumeInit(event) {
-		return false, nil
+		return nil
 	}
 	if err := g.target.verifyInit(event); err != nil {
-		return true, err
+		return err
 	}
 	if g.initSeen {
-		return true, resumeDuplicateInit()
+		return resumeDuplicateInit()
 	}
 	g.initSeen = true
-	return false, nil
+	return nil
 }
 
 func resumeDuplicateInit() error {

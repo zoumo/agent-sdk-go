@@ -31,16 +31,8 @@ type session struct {
 	interactions   map[agent.InteractionRef]*piInteraction
 	mu             sync.Mutex
 	closed         bool
-	submitting     bool
-	interrupting   bool
+	submission     submissionState
 	state          agent.SessionState
-	submitUnknown  bool
-	injecting      bool
-	// Monotonically changing generations prevent a late command reply from
-	// reactivating work that agent_settled has already ended.
-	settled uint64
-	active  string
-	pending string
 	// Only the single native event reader accesses messageID and messageCount.
 	messageID    string
 	messageCount uint64
@@ -121,19 +113,13 @@ func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt 
 	if err != nil {
 		return receipt, operationError("submission_id", err)
 	}
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return receipt, closedError()
+	admitted, err := s.admitPrompt(id)
+	if err != nil {
+		return receipt, err
 	}
-	if s.submitting || s.injecting || s.submitUnknown || s.interrupting {
-		s.mu.Unlock()
+	if !admitted {
 		return agent.InputReceipt{Result: agent.InputNotApplied, Acceptance: agent.Acceptance{Sent: new(false)}}, nil
 	}
-	s.submitting = true
-	s.pending = id
-	generation := s.settled
-	s.mu.Unlock()
 
 	if s.core.config.Tracer != nil {
 		span := submissiontrace.Start(ctx, s.core.config.Tracer)
@@ -142,65 +128,20 @@ func (s *session) StartOrSteer(ctx context.Context, input agent.Input) (receipt 
 	// Pi decides atomically whether to start or steer during prompt admission.
 	// A separate get_state probe here could race Pi's own scheduler.
 	result, sendErr := s.native.Prompt(ctx, message, images, "steer")
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.submitting = false
-	s.pending = ""
-	if sendErr != nil {
-		receipt.Acceptance = commandAcceptance(sendErr)
-		var rejected *pi.CommandError
-		if errors.As(sendErr, &rejected) {
-			receipt.Result = agent.InputNotApplied
-		}
-		err = operationError("start_or_steer", sendErr)
-		if agent.CodeOf(err) == agent.ErrorOutcomeUnknown && s.settled == generation {
-			s.submitUnknown = true
-		}
-		return receipt, err
-	}
-	receipt = agent.InputReceipt{Submission: id, Result: agent.InputAppliedBestEffort, Acceptance: agent.Acceptance{Sent: new(true), NativeAccepted: new(true)}}
-	switch result.Disposition {
-	case "started":
-		receipt.Result = agent.InputAppliedNewWork
-		if s.settled == generation && s.active == "" {
-			s.active = id
-		}
-	case "queued", "handled":
-		// Neither receipt proves which native work consumes the input.
-	default:
-		if s.settled == generation {
-			s.submitUnknown = true
-		}
-		receipt.Result = ""
-		return receipt, &agent.Error{Code: agent.ErrorOutcomeUnknown, Reason: "prompt_disposition_unknown", Message: "Pi returned an unknown prompt disposition"}
-	}
-	return receipt, nil
+	return s.finishPrompt(result.Disposition, sendErr)
 }
 
 func (s *session) Interrupt(ctx context.Context, _ agent.InterruptOptions) (receipt agent.InterruptReceipt, err error) {
 	ctx, observation := s.core.telemetry.Begin(ctx, telemetry.Interrupt)
 	defer func() { observation.End(string(receipt.Result), err) }()
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return receipt, closedError()
+	target, err := s.admitInterrupt()
+	if err != nil {
+		return receipt, err
 	}
-	target := s.active
 	if target == "" {
-		s.mu.Unlock()
 		return agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, nil
 	}
-	if s.interrupting {
-		s.mu.Unlock()
-		return receipt, &agent.Error{Code: agent.ErrorFailedPrecondition, Reason: "interrupt_in_progress", Message: "Pi interrupt is already in progress"}
-	}
-	s.interrupting = true
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.interrupting = false
-		s.mu.Unlock()
-	}()
+	defer s.finishInterrupt()
 	if err := s.native.Abort(ctx); err != nil {
 		return receipt, operationError("interrupt", err)
 	}

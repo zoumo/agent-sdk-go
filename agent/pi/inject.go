@@ -38,25 +38,10 @@ func (s *injectSession) Inject(ctx context.Context, input agent.Input) (receipt 
 		return receipt, operationError("inject", err)
 	}
 
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		return receipt, closedError()
+	if err := s.admitInjection(); err != nil {
+		return receipt, err
 	}
-	if s.submitting || s.injecting || s.submitUnknown {
-		s.mu.Unlock()
-		return receipt, &agent.Error{
-			Code: agent.ErrorFailedPrecondition, Reason: agent.ErrorReasonForCode("inject", agent.ErrorFailedPrecondition),
-			Message: "another input is in flight or its outcome is unknown",
-		}
-	}
-	s.injecting = true
-	s.mu.Unlock()
-	defer func() {
-		s.mu.Lock()
-		s.injecting = false
-		s.mu.Unlock()
-	}()
+	defer s.finishInjection()
 
 	// Pi routes slash commands before deciding whether to start a run. Do not
 	// provide streamingBehavior: SDK injection must never queue a prompt.

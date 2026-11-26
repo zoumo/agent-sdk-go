@@ -9,7 +9,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent"
 	"github.com/zoumo/agent-sdk-go/agent/internal/eventenvelope"
 	"github.com/zoumo/agent-sdk-go/client/pi"
-	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 )
 
 // project runs on the single native reader. Each supported frame yields its
@@ -194,22 +193,14 @@ func (s *session) changeState(running, aborted bool) (agent.StateUpdatePayload, 
 	var reason string
 	var observedError *agent.ObservedError
 	if running {
+		if err := s.submission.agentStarted(); err != nil {
+			return agent.StateUpdatePayload{}, err
+		}
 		next = agent.StateRunning
 		s.stopReason = ""
 		s.runError = nil
-		if s.active == "" {
-			s.active = s.pending
-			if s.active == "" {
-				id, err := uuidv4.New()
-				if err != nil {
-					return agent.StateUpdatePayload{}, err
-				}
-				s.active = id
-			}
-		}
 	} else {
-		s.settled++
-		s.active = ""
+		s.submission.agentSettled()
 		reason, observedError = s.stopReason, s.runError
 		if aborted {
 			reason = "aborted"
@@ -217,7 +208,6 @@ func (s *session) changeState(running, aborted bool) (agent.StateUpdatePayload, 
 		s.stopReason = ""
 		s.runError = nil
 	}
-	s.submitUnknown = false
 	s.state = next
 	return agent.StateUpdatePayload{State: &next, PreviousState: prev, StopReason: reason, Error: observedError}, nil
 }

@@ -50,7 +50,7 @@ func (s *session) registerUI(native pi.Event) ([]agent.Payload, string, string, 
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed || s.active == "" {
+	if s.closed || s.submission.active == "" {
 		return nil, "", "", nil
 	}
 	for _, pending := range s.interactions {

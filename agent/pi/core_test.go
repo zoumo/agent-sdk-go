@@ -182,6 +182,9 @@ func TestPiSessionLifecycle(t *testing.T) {
 			joined, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{input.Content[0], image}})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InputAppliedBestEffort, joined.Result)
+			handled, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "/fixture"}}}})
+			require.NoError(t, err)
+			assert.Equal(t, agent.InputAppliedBestEffort, handled.Result)
 			stopped, err := session.Interrupt(ctx, agent.InterruptOptions{})
 			require.NoError(t, err)
 			assert.Equal(t, agent.InterruptAcknowledged, stopped.Result)
@@ -229,6 +232,69 @@ func TestPiSessionLifecycle(t *testing.T) {
 			require.NoError(t, core.Stop(ctx))
 		})
 	}
+}
+
+func TestPiSettledBeforeStartedReply(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	core := agentpi.New(agentpi.Config{
+		CLIPath: exe, Args: []string{"-test.run=^TestPiRPCPeer$", "--"}, Env: []string{"SDK_PI_PEER=1"},
+		SessionDir: t.TempDir(),
+	})
+	_, err = core.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = core.Stop(context.Background()) })
+	session, err := core.Open(ctx, agent.OpenOptions{Cwd: t.TempDir()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close(context.Background()) })
+	stream, err := session.Events()
+	require.NoError(t, err)
+
+	type result struct {
+		receipt agent.InputReceipt
+		err     error
+	}
+	input := agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "settle before reply"}}}}
+	replies := make(chan result, 1)
+	go func() {
+		receipt, err := session.StartOrSteer(ctx, input)
+		replies <- result{receipt: receipt, err: err}
+	}()
+	for _, want := range []agent.SessionState{agent.StateRunning, agent.StateIdle} {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		payload, ok := event.Payload.(agent.StateUpdatePayload)
+		require.True(t, ok)
+		require.Equal(t, &want, payload.State)
+	}
+	busy, err := session.StartOrSteer(ctx, input)
+	require.NoError(t, err)
+	assert.Equal(t, agent.InputNotApplied, busy.Result)
+	assert.Equal(t, new(false), busy.Acceptance.Sent)
+
+	// The peer waits for this command before sending the held prompt reply.
+	_, err = session.(agent.ConfigController).SetConfig(ctx, agent.ConfigChange{ID: agent.ConfigEffort, Value: "low"})
+	require.NoError(t, err)
+	got := <-replies
+	require.NoError(t, got.err)
+	assert.Equal(t, agent.InputAppliedNewWork, got.receipt.Result)
+	assert.Equal(t, new(true), got.receipt.Acceptance.NativeAccepted)
+	assert.NotEmpty(t, got.receipt.Submission)
+	stopped, err := session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptNoActiveWork, stopped.Result)
+	assert.Empty(t, stopped.Target)
+
+	next, err := session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "hello"}}}})
+	require.NoError(t, err)
+	require.Equal(t, agent.InputAppliedNewWork, next.Result)
+	assert.NotEqual(t, got.receipt.Submission, next.Submission)
+	stopped, err = session.Interrupt(ctx, agent.InterruptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, agent.InterruptAcknowledged, stopped.Result)
+	assert.Equal(t, next.Submission, stopped.Target)
 }
 
 func TestPiMessageEndMetadataIsolation(t *testing.T) {
@@ -320,6 +386,7 @@ func TestPiRPCPeer(t *testing.T) {
 	emit := json.NewEncoder(os.Stdout)
 	scan := bufio.NewScanner(os.Stdin)
 	active := false
+	var delayedPrompt map[string]any
 	for scan.Scan() {
 		var req struct {
 			ID                string `json:"id"`
@@ -344,6 +411,12 @@ func TestPiRPCPeer(t *testing.T) {
 		case "get_state":
 			resp["data"] = map[string]any{"sessionId": "01-test", "isStreaming": active, "thinkingLevel": thinking}
 		case "set_thinking_level":
+			if delayedPrompt != nil {
+				if err := emit.Encode(delayedPrompt); err != nil {
+					os.Exit(25)
+				}
+				delayedPrompt = nil
+			}
 			thinking = req.Level
 			if thinking == "max" {
 				thinking = "high"
@@ -353,8 +426,20 @@ func TestPiRPCPeer(t *testing.T) {
 				os.Exit(30)
 			}
 		case "prompt":
-			if req.StreamingBehavior != "steer" {
+			if req.StreamingBehavior != "steer" || delayedPrompt != nil {
 				os.Exit(22)
+			}
+			if req.Message == "/fixture" {
+				resp["data"] = map[string]string{"disposition": "handled"}
+				break
+			}
+			if req.Message == "settle before reply" && !active {
+				resp["data"] = map[string]string{"disposition": "started"}
+				delayedPrompt = resp
+				if _, err := os.Stdout.WriteString(`{"type":"agent_start"}` + "\n" + `{"type":"agent_settled","aborted":false}` + "\n"); err != nil {
+					os.Exit(32)
+				}
+				continue
 			}
 			if active {
 				if len(req.Images) != 1 || req.Images[0].Type != "image" || req.Images[0].Data != "aGk=" || req.Images[0].MIMEType != "image/png" {

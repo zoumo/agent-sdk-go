@@ -12,7 +12,6 @@ import (
 	"github.com/zoumo/agent-sdk-go/agent/internal/corelease"
 	"github.com/zoumo/agent-sdk-go/agent/internal/telemetry"
 	"github.com/zoumo/agent-sdk-go/client/claude"
-	claudetypes "github.com/zoumo/agent-sdk-go/client/claude/types"
 	"github.com/zoumo/agent-sdk-go/internal/uuidv4"
 	"github.com/zoumo/agent-sdk-go/mcp"
 )
@@ -284,7 +283,6 @@ func (p *Core) openNativeSession(
 		}
 	}
 	var (
-		init     *claudetypes.Event
 		buffered []claude.Received
 		guard    *resumeIdentityGuard
 	)
@@ -292,7 +290,7 @@ func (p *Core) openNativeSession(
 		initContext, cancelInit := waitForInitContext(ctx, p.config.InitializeTimeout)
 		err = native.ProbeIdentity(initContext)
 		if err == nil {
-			init, buffered, guard, err = waitForResumeIdentity(initContext, native, resume.target)
+			buffered, guard, err = waitForResumeIdentity(initContext, native, resume.target)
 		} else {
 			code, reason := agent.ErrorUnavailable, ErrorReasonResumeIdentityWaitFailed
 			if errors.Is(err, claude.ErrProtocol) {
@@ -307,24 +305,6 @@ func (p *Core) openNativeSession(
 			err = errors.Join(err, adapterError(agent.ErrorUnavailable, agent.ErrorReasonForOperation("close", agent.ErrorReasonSuffixFailed), "Claude resume cleanup reported a native failure", nil))
 		}
 		return nil, err
-	}
-	if init != nil {
-		if resumeID != "" && init.SessionID != resumeID {
-			return nil, abortAfterOpenFailure(native, adapterError(
-				agent.ErrorNativeRejected,
-				ErrorReasonResumeIdentityMismatch,
-				"Claude resumed a different native session",
-				nil,
-			))
-		}
-		if !sameDirectory(init.System.CWD, options.Cwd) {
-			return nil, abortAfterOpenFailure(native, adapterError(
-				agent.ErrorNativeRejected,
-				ErrorReasonSessionCWDMismatch,
-				"Claude init working directory does not match the requested directory",
-				nil,
-			))
-		}
 	}
 	if resume != nil {
 		if err := resume.target.verifyPostcheck(ctx); err != nil {
@@ -341,7 +321,6 @@ func (p *Core) openNativeSession(
 	created, err := newSession(
 		p,
 		native,
-		init,
 		identity,
 		options.Features,
 		buffered,

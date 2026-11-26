@@ -56,7 +56,6 @@ type session struct {
 func newSession(
 	provider *Core,
 	native *claude.Session,
-	init *claudetypes.Event,
 	sessionID string,
 	features agent.Features,
 	buffered []claude.Received,
@@ -105,16 +104,6 @@ func newSession(
 			return nil, err
 		}
 		staged = append(staged, events...)
-	}
-	if init != nil && init.System != nil && len(init.System.SlashCommands) != 0 {
-		events, err := created.initialCommandsEvent(*init)
-		if err != nil {
-			return nil, err
-		}
-		staged = append(staged, events...)
-	}
-	if init != nil && init.System != nil {
-		created.injectSupported = supportsInject(init.System.ClaudeCodeVersion)
 	}
 	if err := created.pushEvents(staged); err != nil {
 		return nil, adapterError(
@@ -370,14 +359,8 @@ func (s *session) receiveUntilTerminal() error {
 			}
 			return err
 		}
-		if received.Event != nil {
-			handled, resumeErr := s.resume.inspect(received.Event)
-			if resumeErr != nil {
-				return resumeErr
-			}
-			if handled {
-				continue
-			}
+		if err := s.resume.inspect(received.Event); err != nil {
+			return err
 		}
 		events, convertErr := s.convertReceived(received)
 		if convertErr != nil {

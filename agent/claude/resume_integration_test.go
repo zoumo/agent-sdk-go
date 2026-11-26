@@ -283,6 +283,42 @@ func TestProviderResumeConfirmsInitIdentityAndAllowsGrowth(t *testing.T) {
 	require.FileExists(t, peer.SessionMark)
 }
 
+func TestProviderResumePreservesCommandUpdateOrder(t *testing.T) {
+	for _, timing := range []string{"before status", "after status"} {
+		t.Run(timing, func(t *testing.T) {
+			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			defer cancel()
+			cwd, config := t.TempDir(), newResumeConfigDir(t)
+			writeResumeTranscript(t, config, resumeProjectKey(t, cwd), claudeResumePeerSessionID, cwd)
+			frames := []string{
+				`{"type":"system","subtype":"init","session_id":"__SESSION_ID__","cwd":"__CWD__","claude_code_version":"2.1.293","slash_commands":["initial"]}`,
+				`{"type":"system","subtype":"commands_changed","session_id":"__SESSION_ID__","commands":[{"name":"updated"}]}`,
+			}
+			scenario := claudeResumePeerScenario{CWD: cwd}
+			if timing == "before status" {
+				scenario.Frames = frames
+			} else {
+				scenario.AfterStatus = frames
+			}
+			peer := newClaudeResumePeer(t, scenario)
+			core := newResumeProvider(t, peer.CLIPath, peer.Env, config, time.Second)
+			session, err := core.Resume(ctx, agent.ResumeOptions{
+				SessionID: claudeResumePeerSessionID, OpenOptions: agent.OpenOptions{Cwd: cwd},
+			})
+			require.NoError(t, err)
+			closeSessionOnCleanup(t, session)
+			stream, err := session.Events()
+			require.NoError(t, err)
+			requireStartupForwardingGap(t, ctx, stream)
+			for _, name := range []string{"initial", "updated"} {
+				assert.Equal(t, agent.AvailableCommandsUpdatePayload{
+					AvailableCommands: []agent.AvailableCommand{{Name: name}},
+				}, nextEvent(t, ctx, stream).Payload)
+			}
+		})
+	}
+}
+
 func TestProviderResumeDropsReplayContent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -340,6 +376,7 @@ func TestProviderResumeDropsReplayContent(t *testing.T) {
 	closeSessionOnCleanup(t, session)
 	stream, err := session.Events()
 	require.NoError(t, err)
+	requireStartupForwardingGap(t, ctx, stream)
 	event, err := stream.Next(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, agent.EventAgentMessage, event.Type())

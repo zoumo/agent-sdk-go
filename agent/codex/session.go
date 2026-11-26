@@ -31,19 +31,10 @@ type session struct {
 	features agent.EffectiveFeatures
 	stream   *eventstream.Stream
 
-	mu            sync.Mutex
-	closed        bool
-	submitting    bool
-	injecting     bool
-	submitUnknown bool
-	// workEpoch prevents a late submit failure from rearming unknown state after
-	// the observer has already accepted native turn evidence.
-	workEpoch    uint64
-	activeTurn   string
-	startedTurn  string
-	idleTurn     string
-	lastFinished string
-	state        *agent.SessionState
+	mu       sync.Mutex
+	closed   bool
+	mainTurn mainTurnOwnership
+	state    *agent.SessionState
 
 	interactions      map[agent.InteractionRef]*pendingInteraction
 	requestRefs       map[string]agent.InteractionRef
@@ -141,13 +132,11 @@ func (s *session) StartOrSteer(
 			nil,
 		)
 	}
-	if s.submitting || s.injecting || s.submitUnknown {
+	before, admitted := s.mainTurn.beginSubmit()
+	if !admitted {
 		s.mu.Unlock()
 		return codexInputNotApplied(false), nil
 	}
-	activeBefore := s.activeTurn
-	s.submitting = true
-	submitEpoch := s.workEpoch
 	s.mu.Unlock()
 
 	var traceCarrier *agent.TraceContext
@@ -172,21 +161,17 @@ func (s *session) StartOrSteer(
 	submission, submitErr := s.native.Submit(ctx, nativeInput)
 
 	s.mu.Lock()
-	s.submitting = false
 	if submitErr != nil {
-		notApplied := codexTurnInputNotApplied(submitErr)
-		s.recordSubmitErrorLocked(submitErr, submitEpoch)
+		s.mainTurn.failSubmit(before, submitOutcomeUnknown(submitErr))
 		s.mu.Unlock()
-		if notApplied {
+		if codexTurnInputNotApplied(submitErr) {
 			return codexInputNotApplied(true), nil
 		}
 		return agent.InputReceipt{}, nativeOperationError("start_or_steer", submitErr)
 	}
 	turnID := submission.Response.Turn.ID
 	if turnID == "" {
-		if s.workEpoch == submitEpoch {
-			s.submitUnknown = true
-		}
+		s.mainTurn.failSubmit(before, true)
 		s.mu.Unlock()
 		return agent.InputReceipt{}, adapterError(
 			agent.ErrorOutcomeUnknown,
@@ -195,14 +180,7 @@ func (s *session) StartOrSteer(
 			nil,
 		)
 	}
-	result := agent.InputAppliedNewWork
-	if activeBefore != "" && activeBefore == turnID {
-		result = agent.InputAppliedCurrentWork
-	}
-	// Idle can arrive before the response to the submission that started this turn.
-	if s.lastFinished != turnID && s.idleTurn != turnID {
-		s.activeTurn = turnID
-	}
+	result := s.mainTurn.acceptSubmit(before, turnID)
 	s.mu.Unlock()
 
 	sent, accepted := true, true
@@ -270,17 +248,6 @@ func codexTurnInputNotApplied(err error) bool {
 	return false
 }
 
-func (s *session) recordSubmitErrorLocked(err error, epoch uint64) {
-	if submitOutcomeUnknown(err) && s.workEpoch == epoch {
-		s.submitUnknown = true
-	}
-}
-
-func (s *session) noteWorkEvidenceLocked() {
-	s.workEpoch++
-	s.submitUnknown = false
-}
-
 func submitOutcomeUnknown(err error) bool {
 	if err == nil || errors.Is(err, codex.ErrInvalidInput) {
 		return false
@@ -319,7 +286,7 @@ func (s *session) Interrupt(
 			nil,
 		)
 	}
-	target := s.activeTurn
+	target := s.mainTurn.activeTurnID()
 	s.mu.Unlock()
 	if target == "" {
 		return agent.InterruptReceipt{Result: agent.InterruptNoActiveWork}, nil

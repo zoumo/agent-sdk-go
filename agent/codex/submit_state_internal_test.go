@@ -6,35 +6,46 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/zoumo/agent-sdk-go/client/codex"
 )
 
-func TestUnknownWriteKeepsWorkUnsettled(t *testing.T) {
-	session := &session{}
-	session.mu.Lock()
-	defer session.mu.Unlock()
+func beginTestSubmit(t *testing.T, work *mainTurnOwnership) submitSnapshot {
+	t.Helper()
+	before, admitted := work.beginSubmit()
+	require.True(t, admitted)
+	return before
+}
 
-	session.recordSubmitErrorLocked(errors.New("transport failed"), session.workEpoch)
-	assert.True(t, session.submitUnknown)
+func setUnknownTestSubmit(t *testing.T, work *mainTurnOwnership) {
+	t.Helper()
+	before := beginTestSubmit(t, work)
+	work.failSubmit(before, true)
+}
+
+func TestUnknownWriteKeepsWorkUnsettled(t *testing.T) {
+	var work mainTurnOwnership
+	setUnknownTestSubmit(t, &work)
+	_, admitted := work.beginSubmit()
+	assert.False(t, admitted)
 }
 
 func TestWriteFailureDoesNotRearmAfterTurnEvidence(t *testing.T) {
-	session := &session{}
-	epoch := session.workEpoch
-
-	session.noteWorkEvidenceLocked()
-	session.recordSubmitErrorLocked(errors.New("transport failed"), epoch)
-
-	assert.False(t, session.submitUnknown)
+	var work mainTurnOwnership
+	before := beginTestSubmit(t, &work)
+	require.True(t, work.observeStarted("turn-a"))
+	work.failSubmit(before, true)
+	_, admitted := work.beginSubmit()
+	assert.True(t, admitted)
 }
 
 func TestNativeEvidenceClearsUnknownWrite(t *testing.T) {
-	session := &session{submitUnknown: true}
-
-	session.noteWorkEvidenceLocked()
-
-	assert.False(t, session.submitUnknown)
+	var work mainTurnOwnership
+	setUnknownTestSubmit(t, &work)
+	require.True(t, work.observeStarted("turn-a"))
+	_, admitted := work.beginSubmit()
+	assert.True(t, admitted)
 }
 
 func TestWriteOutcomeUnknownClassification(t *testing.T) {

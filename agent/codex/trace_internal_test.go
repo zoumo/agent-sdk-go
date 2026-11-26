@@ -32,9 +32,9 @@ func TestTraceRejectedLocalSubmissionDoesNotStartSpan(t *testing.T) {
 			case "closed":
 				s.closed = true
 			case "concurrent":
-				s.submitting = true
+				beginTestSubmit(t, &s.mainTurn)
 			case "unknown":
-				s.submitUnknown = true
+				setUnknownTestSubmit(t, &s.mainTurn)
 			}
 			receipt, err := s.StartOrSteer(context.Background(), input)
 			if name == "invalid" || name == "closed" {

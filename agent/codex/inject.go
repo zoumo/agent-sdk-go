@@ -31,19 +31,18 @@ func (s *session) Inject(ctx context.Context, input agent.Input) (receipt agent.
 			agent.ErrorClosed, agent.ErrorReasonSessionClosed, "session is closed", nil,
 		)
 	}
-	if s.submitting || s.injecting || s.submitUnknown {
+	if !s.mainTurn.beginInject() {
 		s.mu.Unlock()
 		return receipt, adapterError(
 			agent.ErrorFailedPrecondition, agent.ErrorReasonForCode("inject", agent.ErrorFailedPrecondition),
 			"another input is in flight or its outcome is unknown", nil,
 		)
 	}
-	s.injecting = true
 	s.mu.Unlock()
 
 	injectErr := s.native.Inject(ctx, []json.RawMessage{item})
 	s.mu.Lock()
-	s.injecting = false
+	s.mainTurn.endInject()
 	s.mu.Unlock()
 	if injectErr != nil {
 		receipt.Acceptance = configAcceptance(injectErr)

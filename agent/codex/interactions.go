@@ -415,28 +415,14 @@ func (s *session) registerInteraction(
 			"Codex repeated an interaction request; the original reference remains authoritative",
 		)
 	}
-	if interaction.threadID == s.ID() && interaction.turnID != "" {
-		if s.activeTurn == "" {
-			if (!s.submitting && !s.submitUnknown) ||
-				s.lastFinished == interaction.turnID {
-				s.mu.Unlock()
-				return s.unsupportedRequest(
-					interaction.received,
-					"stale_native_request",
-					"Codex native request does not belong to the current session work",
-				)
-			}
-			s.activeTurn = interaction.turnID
-			s.noteWorkEvidenceLocked()
-		}
-		if s.activeTurn != interaction.turnID || s.lastFinished == interaction.turnID {
-			s.mu.Unlock()
-			return s.unsupportedRequest(
-				interaction.received,
-				"stale_native_request",
-				"Codex native request does not belong to the current session work",
-			)
-		}
+	if interaction.threadID == s.ID() && interaction.turnID != "" &&
+		!s.mainTurn.acceptRequest(interaction.turnID) {
+		s.mu.Unlock()
+		return s.unsupportedRequest(
+			interaction.received,
+			"stale_native_request",
+			"Codex native request does not belong to the current session work",
+		)
 	}
 
 	ref, sequence, err := s.interactionLedger.Allocate()
@@ -454,7 +440,7 @@ func (s *session) registerInteraction(
 
 	var stateEvent *agent.Event
 	if interaction.blocking &&
-		(interaction.threadID == s.ID() || s.activeTurn != "") {
+		(interaction.threadID == s.ID() || s.mainTurn.activeTurnID() != "") {
 		var previous *agent.SessionState
 		if s.state != nil {
 			value := *s.state
@@ -1002,7 +988,7 @@ func (s *session) interactionsSettledLocked() *agent.StateUpdatePayload {
 	}
 	previous := *s.state
 	next := agent.StateIdle
-	if s.activeTurn != "" {
+	if s.mainTurn.activeTurnID() != "" {
 		next = agent.StateRunning
 	}
 	s.state = new(next)

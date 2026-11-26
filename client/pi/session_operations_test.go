@@ -2,9 +2,7 @@ package pi_test
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"maps"
 	"testing"
 
@@ -43,10 +41,7 @@ func sessionPeer(exchanges ...sessionExchange) func(peer) error {
 				return err
 			}
 		}
-		if c, err := p.receive(); !errors.Is(err, io.EOF) {
-			return fmt.Errorf("expected EOF, got command %q, error %v", c.Type, err)
-		}
-		return nil
+		return p.expectEOF()
 	}
 }
 

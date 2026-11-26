@@ -231,7 +231,52 @@ func TestPiSessionLifecycle(t *testing.T) {
 	}
 }
 
-// TestPiRPCPeer runs only as the purpose-built subprocess of TestPiSessionLifecycle.
+func TestPiMessageEndMetadataIsolation(t *testing.T) {
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	core := agentpi.New(agentpi.Config{
+		CLIPath: exe, Args: []string{"-test.run=^TestPiRPCPeer$", "--"}, Env: []string{"SDK_PI_PEER=1"},
+		SessionDir: t.TempDir(),
+	})
+	_, err = core.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = core.Stop(context.Background()) })
+	session, err := core.Open(ctx, agent.OpenOptions{Cwd: t.TempDir()})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = session.Close(context.Background()) })
+	stream, err := session.Events()
+	require.NoError(t, err)
+	_, err = session.StartOrSteer(ctx, agent.Input{Content: []agent.ContentBlock{{Text: &agent.ContentBlockText{Text: "think and answer"}}}})
+	require.NoError(t, err)
+	for _, want := range []agent.EventType{agent.EventSessionStateUpdate, agent.EventSessionUnsupportedNativeEvent} {
+		event, err := stream.Next(ctx)
+		require.NoError(t, err)
+		require.Equal(t, want, event.Type())
+	}
+	thinking, err := stream.Next(ctx)
+	require.NoError(t, err)
+	require.Equal(t, agent.EventAgentThinking, thinking.Type())
+	message, err := stream.Next(ctx)
+	require.NoError(t, err)
+	require.Equal(t, agent.EventAgentMessage, message.Type())
+	require.NoError(t, session.Close(ctx))
+
+	thinkingPi, ok := thinking.Meta["pi"].(map[string]any)
+	require.True(t, ok)
+	messagePi, ok := message.Meta["pi"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "message_end", thinkingPi["nativeType"])
+	require.Equal(t, "message_end", messagePi["nativeType"])
+
+	thinking.Meta["consumer"] = true
+	thinkingPi["nativeType"] = "modified"
+	assert.NotContains(t, message.Meta, "consumer")
+	assert.Equal(t, "message_end", messagePi["nativeType"])
+}
+
+// TestPiRPCPeer runs only as a purpose-built test subprocess.
 func TestPiRPCPeer(t *testing.T) {
 	if os.Getenv("SDK_PI_PEER") != "1" {
 		return
@@ -330,6 +375,12 @@ func TestPiRPCPeer(t *testing.T) {
 			}
 			switch req.Message {
 			case "hello":
+			case "think and answer":
+				active = false
+				events = append(events[:2],
+					`{"type":"message_end","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Consider the question."},{"type":"text","text":"Hi"}],"stopReason":"stop"}}`,
+					`{"type":"agent_settled","aborted":false}`,
+				)
 			case "continue":
 				active = false
 				events = append(events[:2],

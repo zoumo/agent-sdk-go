@@ -17,10 +17,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	agenttestify "github.com/zoumo/agent-sdk-go/replay"
 )
+
+func TestLibraryStartMockAgentMissingExecutionPreservesStreams(t *testing.T) {
+	prepared := prepareStartMockFixture(t, "SDK-CASE-001")
+	input := newControlledInput(mainClientFrames(t, prepared))
+	output := &testWriteCloser{}
+	streams := agenttestify.StartMockAgentStreams{Reader: input, Writer: output, Stderr: io.Discard}
+
+	run, err := prepared.StartMockAgent(t.Context(), agenttestify.MockAgentOptions{
+		ExecutionID: "missing",
+	}, streams)
+	require.Nil(t, run)
+	require.ErrorContains(t, err, "absent from index")
+	readerOpen := assert.False(t, input.Closed(), "reader closed before claim")
+	writerOpen := assert.False(t, output.Closed(), "writer closed before claim")
+	if !readerOpen || !writerOpen {
+		return
+	}
+
+	run, err = prepared.StartMockAgent(t.Context(), agenttestify.MockAgentOptions{}, streams)
+	require.NoError(t, err)
+	cleanupMockRun(t, run)
+	awaitFullConsumption(t, run)
+	require.NoError(t, input.CloseEOF())
+	_, err = run.Wait(testContext(t))
+	require.NoError(t, err)
+	assert.True(t, input.Closed(), "reader remained open after replay")
+	assert.True(t, output.Closed(), "writer remained open after replay")
+}
 
 func TestLibraryStartMockAgentFullConsumptionAndReport(t *testing.T) {
 	root := t.TempDir()
@@ -646,40 +675,53 @@ func TestLibraryStartMockAgentAbortAndCancellation(t *testing.T) {
 		requireFullConsumptionAbsent(t, run)
 	})
 
-	t.Run("canceled before claim", func(t *testing.T) {
-		prepared := prepareStartMockFixture(t, "SDK-CASE-001")
-		startLock, err := os.OpenFile(filepath.Join(prepared.FixtureDir, "locks", "mock-start.lock"), os.O_CREATE|os.O_RDWR, 0o600)
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = startLock.Close() })
-		require.NoError(t, syscall.Flock(int(startLock.Fd()), syscall.LOCK_EX))
+	for _, want := range []error{context.Canceled, context.DeadlineExceeded} {
+		t.Run(want.Error()+" before claim", func(t *testing.T) {
+			prepared := prepareStartMockFixture(t, "SDK-CASE-001")
+			indexPath := filepath.Join(prepared.FixtureDir, "executions", "index.json")
+			indexBefore := readFile(t, indexPath)
+			startLock, err := os.OpenFile(filepath.Join(prepared.FixtureDir, "locks", "mock-start.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+			require.NoError(t, err)
+			t.Cleanup(func() { _ = startLock.Close() })
+			require.NoError(t, syscall.Flock(int(startLock.Fd()), syscall.LOCK_EX))
 
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		run, err := prepared.StartMockAgent(ctx, agenttestify.MockAgentOptions{}, agenttestify.StartMockAgentStreams{
-			Reader: &blockingInput{},
-			Writer: &testWriteCloser{},
-			Stderr: &bytes.Buffer{},
+			input := newControlledInput("")
+			output := &testWriteCloser{}
+			type outcome struct {
+				run *agenttestify.MockRun
+				err error
+			}
+			started := make(chan outcome, 1)
+			go func() {
+				ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+				defer cancel()
+				if errors.Is(want, context.Canceled) {
+					cancel()
+				}
+				run, err := prepared.StartMockAgent(ctx, agenttestify.MockAgentOptions{}, agenttestify.StartMockAgentStreams{
+					Reader: input,
+					Writer: output,
+					Stderr: io.Discard,
+				})
+				started <- outcome{run: run, err: err}
+			}()
+			select {
+			case result := <-started:
+				require.Nil(t, result.run)
+				require.ErrorIs(t, result.err, want)
+			case <-time.After(5 * time.Second):
+				t.Fatal("startup did not return while the start lock was held")
+			}
+
+			require.NoError(t, syscall.Flock(int(startLock.Fd()), syscall.LOCK_UN))
+			require.Never(t, func() bool {
+				data, err := os.ReadFile(indexPath)
+				return err != nil || !bytes.Equal(data, indexBefore)
+			}, 500*time.Millisecond, 10*time.Millisecond, "startup changed the index after returning a nil run")
+			require.False(t, input.Closed())
+			require.False(t, output.Closed())
 		})
-		require.Nil(t, run)
-		require.ErrorIs(t, err, context.Canceled)
-
-		require.NoError(t, syscall.Flock(int(startLock.Fd()), syscall.LOCK_UN))
-		require.Eventually(t, func() bool {
-			data, readErr := os.ReadFile(filepath.Join(prepared.FixtureDir, "executions", "index.json"))
-			if readErr != nil {
-				return false
-			}
-			var index struct {
-				Executions []struct {
-					Status string `json:"status"`
-				} `json:"executions"`
-			}
-			if json.Unmarshal(data, &index) != nil {
-				return false
-			}
-			return len(index.Executions) == 1 && index.Executions[0].Status == "failed"
-		}, 5*time.Second, 10*time.Millisecond, "canceled pre-claim run did not finish")
-	})
+	}
 }
 
 func TestLibraryStartMockAgentAbortDuringFinalizeFails(t *testing.T) {

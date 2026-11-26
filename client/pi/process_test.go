@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -55,6 +56,17 @@ func TestPiProcessPeer(t *testing.T) {
 		if err := json.NewEncoder(os.Stdout).Encode(reply); err != nil {
 			os.Exit(6)
 		}
+		if hold := os.Getenv("PI_TEST_STDOUT_HOLD"); hold != "" {
+			child := exec.CommandContext(t.Context(), args[0], "-test.run=^TestPiStdoutHolder$", "--", hold)
+			child.Stdout = os.Stdout
+			if err := child.Start(); err != nil {
+				os.Exit(9)
+			}
+			if _, err := fmt.Fprintln(os.Stdout, `{"type":"agent_end","messages":[]}`); err != nil {
+				os.Exit(10)
+			}
+			os.Exit(7)
+		}
 	}
 	if err := sc.Err(); err != nil {
 		os.Exit(7)
@@ -65,6 +77,57 @@ func TestPiProcessPeer(t *testing.T) {
 		}
 	}
 	os.Exit(0)
+}
+
+// TestPiStdoutHolder keeps the inherited pipe open until the test releases it.
+func TestPiStdoutHolder(t *testing.T) {
+	if os.Getenv("PI_TEST_PROCESS_PEER") != "1" {
+		return
+	}
+	hold := os.Args[len(os.Args)-1]
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); {
+		if _, err := os.Stat(hold); os.IsNotExist(err) {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	os.Exit(0)
+}
+
+func TestOpenFinishesWhenDescendantHoldsStdout(t *testing.T) {
+	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+	defer cancel()
+	hold := filepath.Join(t.TempDir(), "hold-stdout")
+	require.NoError(t, os.WriteFile(hold, nil, 0o600))
+	exe, err := os.Executable()
+	require.NoError(t, err)
+	s, err := pi.Open(ctx, pi.Options{
+		Command: exe,
+		Args:    []string{"-test.run=^TestPiProcessPeer$", "--"},
+		Env:     []string{"PI_TEST_PROCESS_PEER=1", "PI_TEST_STDOUT_HOLD=" + hold, "GORACE=atexit_sleep_ms=0"},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		assert.NoError(t, os.Remove(hold))
+		_ = s.CloseAndDiscard()
+	})
+
+	start := time.Now()
+	select {
+	case <-s.Done():
+		t.Logf("Session.Done closed after %v", time.Since(start))
+	case <-time.After(4 * time.Second):
+		t.Fatalf("Session.Done still open after %v with inherited stdout", time.Since(start))
+	}
+	var exitErr *exec.ExitError
+	require.ErrorAs(t, s.Err(), &exitErr)
+	assert.Equal(t, 7, exitErr.ExitCode())
+	event, err := s.Receive(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, "agent_end", event.Type)
+	assert.JSONEq(t, `{"type":"agent_end","messages":[]}`, string(event.Raw))
+	_, err = s.Receive(ctx)
+	assert.ErrorIs(t, err, exitErr)
 }
 
 func TestOpenAndExactResume(t *testing.T) {

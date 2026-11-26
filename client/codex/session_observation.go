@@ -3,6 +3,7 @@ package codex
 import (
 	"encoding/json"
 	"errors"
+	"slices"
 
 	"github.com/zoumo/agent-sdk-go/client/codex/types"
 	"github.com/zoumo/agent-sdk-go/client/internal/lineage"
@@ -92,6 +93,47 @@ func nativeThreadParents(method string, params json.RawMessage) (child string, p
 	return child, parents
 }
 
+type completionRouting struct {
+	receivers    []string
+	spawn        bool
+	startedAgent string
+}
+
+// Take ownership of routing evidence before Receive can expose the event.
+func snapshotCompletionRouting(event types.Event, identity types.EventIdentity) completionRouting {
+	n, ok := event.Data.(*types.ItemCompletedNotification)
+	if !ok || event.DecodeError != nil {
+		return completionRouting{}
+	}
+	var routing completionRouting
+	if tool := n.Item.CollabAgentToolCall; tool != nil && tool.Status == types.CollabAgentToolCallStatusCompleted && tool.SenderThreadID == identity.ThreadID {
+		routing.receivers = slices.Clone(tool.ReceiverThreadIDs)
+		routing.spawn = tool.Tool == types.CollabAgentToolSpawnAgent
+	}
+	if activity := n.Item.SubAgentActivity; activity != nil && activity.Kind == types.SubAgentActivityKindStarted && identity.TurnID != "" && identity.ItemID != "" && identity.ItemID == activity.ID {
+		routing.startedAgent = activity.AgentThreadID
+	}
+	return routing
+}
+
+func (s *Session) applyCompletionRoutingLocked(routing completionRouting, sender, method string) {
+	if s.closed {
+		return
+	}
+	for _, receiver := range routing.receivers {
+		if routing.spawn {
+			if s.addMemberLocked(receiver, method) {
+				s.parentLocked(receiver, sender, method)
+			}
+		} else if !s.member(receiver) {
+			s.observeLocked(Observation{ThreadID: receiver, Method: method, Reason: "communication-target-outside-confirmed-scope"})
+		}
+	}
+	if routing.startedAgent != "" && s.addMemberLocked(routing.startedAgent, method) {
+		s.parentLocked(routing.startedAgent, sender, method)
+	}
+}
+
 func (c *Client) publishSessionsLocked(method string, params json.RawMessage, raw []byte) {
 	identity := treeIdentity(params)
 	child, parents := nativeThreadParents(method, params)
@@ -114,33 +156,12 @@ func (c *Client) publishSessionsLocked(method string, params json.RawMessage, ra
 		event := decodeEvent(method, params)
 		event.Raw = append(json.RawMessage(nil), raw...)
 		event.DecodeError = c.safeError(event.DecodeError)
+		routing := snapshotCompletionRouting(event, identity)
 		s.acceptLocked(Received{Kind: ReceivedEvent, Event: &event, Raw: event.Raw, Params: event.Params, Source: identity, Origin: "live"})
 		for _, parent := range parents {
 			s.parentLocked(child, parent, method)
 		}
-		if s.closed {
-			continue
-		}
-		n, ok := event.Data.(*types.ItemCompletedNotification)
-		if !ok || event.DecodeError != nil {
-			continue
-		}
-		if tool := n.Item.CollabAgentToolCall; tool != nil && tool.Status == types.CollabAgentToolCallStatusCompleted && tool.SenderThreadID == identity.ThreadID {
-			for _, receiver := range tool.ReceiverThreadIDs {
-				if tool.Tool == types.CollabAgentToolSpawnAgent {
-					if s.addMemberLocked(receiver, method) {
-						s.parentLocked(receiver, identity.ThreadID, method)
-					}
-				} else if !s.member(receiver) {
-					s.observeLocked(Observation{ThreadID: receiver, Method: method, Reason: "communication-target-outside-confirmed-scope"})
-				}
-			}
-		}
-		if activity := n.Item.SubAgentActivity; activity != nil && activity.Kind == types.SubAgentActivityKindStarted && identity.TurnID != "" && identity.ItemID != "" && identity.ItemID == activity.ID {
-			if s.addMemberLocked(activity.AgentThreadID, method) {
-				s.parentLocked(activity.AgentThreadID, identity.ThreadID, method)
-			}
-		}
+		s.applyCompletionRoutingLocked(routing, identity.ThreadID, method)
 	}
 	if !accepted {
 		c.quarantineLocked(raw)

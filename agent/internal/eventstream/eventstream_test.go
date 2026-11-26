@@ -82,10 +82,12 @@ func TestNaturalTerminationKeepsEventsClaimableAndReleasesBeforeDone(t *testing.
 						order = append(order, "closures")
 						return []agent.Event{{EventID: "closed-first"}, {EventID: "closed-second"}}
 					},
-					Published: func(events []agent.Event) {
-						for _, event := range events {
-							order = append(order, event.EventID)
+					PreparePublication: func(events []agent.Event) func() {
+						ids := make([]string, len(events))
+						for i, event := range events {
+							ids[i] = event.EventID
 						}
+						return func() { order = append(order, ids...) }
 					},
 					Release: func() {
 						order = append(order, "release")

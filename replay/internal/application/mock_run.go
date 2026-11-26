@@ -60,19 +60,12 @@ type MockRun struct {
 	done        chan struct{}
 	finishOnce  sync.Once
 	claimDone   chan struct{}
-	claimOnce   sync.Once
 	stopOnce    sync.Once
 	mu          sync.RWMutex
-	claimed     bool
 	finished    bool
 	stopErr     error
 	terminal    *lifecycle.MockResult
 	terminalErr error
-}
-
-type startSignal struct {
-	start ExecutionStart
-	err   error
 }
 
 // StartMock validates, claims, writes running evidence and exposes the overlay
@@ -96,6 +89,9 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 	if sameStream(streams.Reader, streams.Writer) {
 		return nil, errors.New("mock reader and writer must be separate streams")
 	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	prepared, err := prepareInProcessMock(o)
 	if err != nil {
 		return nil, err
@@ -112,11 +108,7 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 		done:      make(chan struct{}),
 		claimDone: make(chan struct{}),
 	}
-	var releaseOnce sync.Once
-	release := func() {
-		releaseOnce.Do(func() { close(run.release) })
-	}
-	started := make(chan startSignal, 1)
+	started := make(chan ExecutionStart)
 	go func() {
 		select {
 		case <-ctx.Done():
@@ -135,14 +127,12 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 			Stderr: streams.Stderr,
 		}, mock.InProcessCallbacks{
 			Started: func(state lifecycle.MockContext) error {
-				run.markClaimed()
+				close(run.claimDone)
 				start, err := executionStart(state)
 				if err != nil {
-					err = lifecycle.ClassifyFailure(lifecycle.FailureClassInternal, err)
-					started <- startSignal{err: err}
-					return err
+					return lifecycle.ClassifyFailure(lifecycle.FailureClassInternal, err)
 				}
-				started <- startSignal{start: start}
+				started <- start
 				<-run.release
 				return nil
 			},
@@ -152,56 +142,24 @@ func StartMock(ctx context.Context, o MockOptions, streams StartMockStreams) (*M
 		run.finish(result, runErr)
 	}()
 
-	var signal startSignal
-	haveStart := false
+	// Cancellation is decided by the transaction before it commits to a
+	// connection. Wait for that decision before returning a nil handle.
 	select {
-	case signal = <-started:
-		haveStart = true
+	case run.Start = <-started:
+		close(run.release)
 	case <-run.done:
-		select {
-		case signal = <-started:
-			haveStart = true
-		default:
+		if run.terminal != nil {
+			return run, run.terminalErr
 		}
-	case <-ctx.Done():
-		select {
-		case signal = <-started:
-			haveStart = true
-		default:
+		if err := ctx.Err(); err != nil {
+			return nil, err
 		}
-	}
-	if haveStart {
-		if signal.err == nil {
-			run.Start = signal.start
-		}
-	}
-	release()
-	if haveStart && signal.err != nil {
-		<-run.done
-		err := run.terminalError()
-		return run, err
-	}
-	if !haveStart {
-		if run.wasClaimed() {
-			_ = run.stop(lifecycle.ContextFailure(ctx))
-			<-run.done
-			err := run.terminalError()
-			return run, err
-		}
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		err := run.terminalError()
-		if err == nil {
-			err = errors.New("mock failed before start")
-		}
-		return nil, err
+		return nil, run.terminalErr
 	}
 	if ctx.Err() != nil {
 		_ = run.stop(lifecycle.ContextFailure(ctx))
 		<-run.done
-		err := run.terminalError()
-		return run, err
+		return run, run.terminalErr
 	}
 	return run, nil
 }
@@ -288,7 +246,9 @@ func (r *MockRun) stop(cause error) error {
 
 func (r *MockRun) finish(result *lifecycle.MockResult, runErr error) {
 	r.finishOnce.Do(func() {
-		if !r.streams.Closed() {
+		// The transaction returns a result once it claims the connection,
+		// even if it fails before calling Started.
+		if result != nil && !r.streams.Closed() {
 			runErr = errors.Join(runErr, r.streams.Close(runErr))
 		}
 		if runErr != nil {
@@ -304,9 +264,6 @@ func (r *MockRun) finish(result *lifecycle.MockResult, runErr error) {
 			}
 		}
 		r.mu.Lock()
-		if result != nil {
-			r.claimed = true
-		}
 		r.finished = true
 		r.terminal = result
 		r.terminalErr = runErr
@@ -314,25 +271,6 @@ func (r *MockRun) finish(result *lifecycle.MockResult, runErr error) {
 		r.cancel(nil)
 		close(r.done)
 	})
-}
-
-func (r *MockRun) markClaimed() {
-	r.mu.Lock()
-	r.claimed = true
-	r.mu.Unlock()
-	r.claimOnce.Do(func() { close(r.claimDone) })
-}
-
-func (r *MockRun) wasClaimed() bool {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.claimed
-}
-
-func (r *MockRun) terminalError() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.terminalErr
 }
 
 func (r *MockRun) terminalSnapshot() (*lifecycle.MockResult, error) {

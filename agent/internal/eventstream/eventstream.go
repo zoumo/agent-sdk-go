@@ -19,7 +19,9 @@ type Hooks struct {
 	CloseNative func() error
 	FinalCause  func() error
 	Release     func()
-	Published   func([]agent.Event)
+	// PreparePublication snapshots data before delivery and returns a callback
+	// that runs only after the queue accepts the batch.
+	PreparePublication func([]agent.Event) func()
 }
 
 type Stream struct {
@@ -74,11 +76,15 @@ func (s *Stream) Publish(events []agent.Event) error {
 	for _, event := range events {
 		items = append(items, queue.Item[agent.Event]{Value: event, Bytes: 1})
 	}
+	var recordPublication func()
+	if s.hooks.PreparePublication != nil {
+		recordPublication = s.hooks.PreparePublication(events)
+	}
 	if err := s.events.PushBatch(items); err != nil {
 		return err
 	}
-	if s.hooks.Published != nil {
-		s.hooks.Published(events)
+	if recordPublication != nil {
+		recordPublication()
 	}
 	return nil
 }
